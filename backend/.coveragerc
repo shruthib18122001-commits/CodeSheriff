@@ -1,0 +1,8 @@
+[run]
+omit =
+    app/main.py
+    app/worker.py
+    tests/*
+
+[report]
+show_missing = True
