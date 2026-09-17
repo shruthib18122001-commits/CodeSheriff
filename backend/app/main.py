@@ -3,9 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import sqlalchemy
 
-from app.api import auth, repos, query, billing
+from app.api import auth, repos, query, billing, community
 from app.db.session import engine, Base
-from app.models import user, repo, code_chunk, query_history
+from app.models import user, repo, code_chunk, query_history, community_post
 
 
 @asynccontextmanager
@@ -38,6 +38,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(repos.router, prefix="/api/repos", tags=["repos"])
 app.include_router(query.router, prefix="/api/query", tags=["query"])
 app.include_router(billing.router, prefix="/api/billing", tags=["billing"])
+app.include_router(community.router, prefix="/api/community", tags=["community"])
 
 
 @app.get("/health")
