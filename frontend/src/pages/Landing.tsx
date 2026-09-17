@@ -73,13 +73,13 @@ function Landing() {
 
       <section className="feature-grid">
         {FEATURES.map((f) => (
-          <div className="feature-card" key={f.title}>
+          <button className="feature-card" key={f.title} onClick={handleLogin}>
             <div className="icon" style={{ background: `${f.color}22`, color: f.color }}>
               {f.icon}
             </div>
             <h3>{f.title}</h3>
             <p>{f.description}</p>
-          </div>
+          </button>
         ))}
       </section>
 

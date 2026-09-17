@@ -100,7 +100,7 @@ code, pre {
   font-size: 13px;
 }
 
-input, textarea {
+input, textarea, select {
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   color: var(--color-text);
@@ -110,7 +110,7 @@ input, textarea {
   font-family: inherit;
 }
 
-input:focus, textarea:focus {
+input:focus, textarea:focus, select:focus {
   outline: none;
   border-color: var(--color-primary);
 }
@@ -176,6 +176,15 @@ input:focus, textarea:focus {
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   padding: 28px 24px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+}
+
+.feature-card:hover {
+  border-color: var(--color-primary);
 }
 
 .feature-card .icon {
@@ -420,6 +429,30 @@ input:focus, textarea:focus {
   font-size: 16px;
 }
 
+.repo-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.repo-tab {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--color-text-dim);
+  text-decoration: none;
+}
+
+.repo-tab:hover {
+  color: var(--color-text);
+  background: var(--color-surface-raised);
+}
+
+.repo-tab.active {
+  color: var(--color-text);
+  background: var(--color-surface-raised);
+  font-weight: 500;
+}
+
 .main-panel-body {
   flex: 1;
   overflow-y: auto;
@@ -435,6 +468,66 @@ input:focus, textarea:focus {
   color: var(--color-text-dim);
   text-align: center;
   gap: 12px;
+}
+
+/* ---------- Community ---------- */
+
+.community-composer {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.community-composer textarea {
+  flex: 1;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.community-posts {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.community-post {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.community-post-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.community-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+}
+
+.community-author {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.community-time {
+  font-size: 12px;
+  color: var(--color-text-dim);
+  margin-left: auto;
+}
+
+.community-content {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
 }
 
 /* ---------- Modal ---------- */
@@ -545,15 +638,193 @@ input:focus, textarea:focus {
   font-style: italic;
 }
 
-.chat-input-row {
+.chat-attachments {
   display: flex;
-  gap: 10px;
-  padding-top: 16px;
-  border-top: 1px solid var(--color-border);
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
 }
 
-.chat-input-row input {
+.attachment-chip {
+  font-size: 12px;
+  color: var(--color-text-dim);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 3px 8px;
+}
+
+.attachment-preview-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.attachment-preview-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--color-text);
+  max-width: 220px;
+}
+
+.attachment-preview-chip img {
+  width: 24px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.attachment-preview-icon {
+  font-size: 16px;
+}
+
+.attachment-preview-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-preview-remove {
+  background: none;
+  border: none;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 12px;
+}
+
+.attachment-preview-remove:hover {
+  color: var(--color-red);
+}
+
+.chat-composer {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-bg);
+}
+
+.chat-composer:focus-within {
+  border-color: var(--color-primary);
+}
+
+.chat-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chat-text-input {
   flex: 1;
+  border: none;
+  background: transparent;
+  padding: 8px 4px;
+}
+
+.chat-text-input:focus {
+  outline: none;
+  border: none;
+}
+
+.attach-button {
+  flex: 0 0 auto;
+  width: 40px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.attach-button:hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+.attach-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.effort-picker {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.effort-picker-trigger {
+  height: 100%;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.effort-picker-trigger:hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+.effort-picker-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.effort-picker-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  width: 280px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  z-index: 20;
+}
+
+.effort-picker-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.effort-picker-option:hover {
+  background: var(--color-surface);
+}
+
+.effort-picker-option-label {
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.effort-picker-option-desc {
+  font-size: 12px;
+  color: var(--color-text-dim);
+  margin-top: 2px;
+}
+
+.effort-picker-check {
+  color: var(--color-primary);
+  font-size: 14px;
+  flex-shrink: 0;
 }
 
 .progress-bar-track {

@@ -1,9 +1,10 @@
 import { useCallback, useState } from "react";
-import { askQuestion, type Source } from "./api";
+import { askQuestion, type Attachment, type Source, type ThinkingLevel } from "./api";
 
 export interface ChatMessage {
   id: string;
   question: string;
+  attachmentNames?: string[];
   answer?: string;
   sources?: Source[];
   loading: boolean;
@@ -18,23 +19,30 @@ function makeId(): string {
 export function useChat(repoId: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
+  // Bumped after each query that actually reaches the server (success or
+  // fallback answer) -- the backend counts both toward the monthly quota.
+  const [answeredCount, setAnsweredCount] = useState(0);
 
   const send = useCallback(
-    async (question: string) => {
+    async (question: string, thinkingLevel?: ThinkingLevel, attachments?: Attachment[]) => {
       const trimmed = question.trim();
       if (!trimmed) return;
 
       const id = makeId();
-      setMessages((prev) => [...prev, { id, question: trimmed, loading: true }]);
+      setMessages((prev) => [
+        ...prev,
+        { id, question: trimmed, attachmentNames: attachments?.map((a) => a.filename), loading: true },
+      ]);
       setSending(true);
 
       try {
-        const result = await askQuestion(repoId, trimmed);
+        const result = await askQuestion(repoId, trimmed, thinkingLevel, attachments);
         setMessages((prev) =>
           prev.map((m) =>
             m.id === id ? { ...m, answer: result.answer, sources: result.sources, loading: false } : m
           )
         );
+        setAnsweredCount((n) => n + 1);
       } catch (e: unknown) {
         const detail =
           (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
@@ -47,5 +55,5 @@ export function useChat(repoId: string) {
     [repoId]
   );
 
-  return { messages, send, sending };
+  return { messages, send, sending, answeredCount };
 }

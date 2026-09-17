@@ -8,10 +8,12 @@ import ConnectRepoModal from "./ConnectRepoModal";
 interface Props {
   activeRepoId?: string;
   /** Which page tapping a repo should navigate to. */
-  linkTo?: "chat" | "architecture";
+  linkTo?: "chat" | "architecture" | "community";
+  /** Bump this (e.g. after each answered question) to refetch the query quota. */
+  planRefreshSignal?: number;
 }
 
-function Sidebar({ activeRepoId, linkTo = "chat" }: Props) {
+function Sidebar({ activeRepoId, linkTo = "chat", planRefreshSignal }: Props) {
   const { repos, loading, error, connect, remove } = useRepos();
   const [plan, setPlan] = useState<PlanInfo | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -21,7 +23,7 @@ function Sidebar({ activeRepoId, linkTo = "chat" }: Props) {
     fetchPlan()
       .then(setPlan)
       .catch(() => setPlan(null));
-  }, []);
+  }, [planRefreshSignal]);
 
   async function handleDelete(e: MouseEvent, repoId: string) {
     e.stopPropagation();

@@ -110,13 +110,49 @@ export async function fetchDrift(repoId: string): Promise<DriftItem[]> {
   return data.drifts;
 }
 
-export async function askQuestion(repoId: string, question: string): Promise<AskResponse> {
-  const { data } = await api.post<AskResponse>("/query/ask", { repo_id: repoId, question });
+export type ThinkingLevel = "low" | "medium" | "high";
+
+export interface Attachment {
+  filename: string;
+  mime_type: string;
+  data: string; // base64-encoded file contents, no data: URL prefix
+}
+
+export async function askQuestion(
+  repoId: string,
+  question: string,
+  thinkingLevel?: ThinkingLevel,
+  attachments?: Attachment[]
+): Promise<AskResponse> {
+  const { data } = await api.post<AskResponse>("/query/ask", {
+    repo_id: repoId,
+    question,
+    thinking_level: thinkingLevel,
+    attachments,
+  });
   return data;
 }
 
 export async function fetchPlan(): Promise<PlanInfo> {
   const { data } = await api.get<PlanInfo>("/billing/plan");
+  return data;
+}
+
+export interface CommunityPost {
+  id: string;
+  content: string;
+  created_at: string;
+  author_username: string;
+  author_avatar_url: string | null;
+}
+
+export async function fetchCommunityPosts(repoId: string): Promise<CommunityPost[]> {
+  const { data } = await api.get<CommunityPost[]>(`/community/${repoId}/posts`);
+  return data;
+}
+
+export async function createCommunityPost(repoId: string, content: string): Promise<CommunityPost> {
+  const { data } = await api.post<CommunityPost>(`/community/${repoId}/posts`, { content });
   return data;
 }
 

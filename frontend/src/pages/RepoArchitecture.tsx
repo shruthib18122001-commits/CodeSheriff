@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import ReactFlow, { Background, Controls, MarkerType, type Edge, type Node } from "reactflow";
 import "reactflow/dist/style.css";
+import RepoTabs from "../components/RepoTabs";
 import Sidebar from "../components/Sidebar";
 import {
   fetchArchitecture,
@@ -49,8 +50,9 @@ function RepoArchitecture() {
       ]);
       setGraph(arch);
       setDrifts(driftList);
-    } catch {
-      setError("Could not load the architecture map. The repo may not have finished indexing yet.");
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setError(detail || "Could not load the architecture map. The repo may not have finished indexing yet.");
     } finally {
       setLoading(false);
     }
@@ -87,6 +89,7 @@ function RepoArchitecture() {
       <div className="main-panel">
         <div className="main-panel-header">
           <h2>Architecture map</h2>
+          <RepoTabs active="architecture" />
           <button className="btn btn-outline btn-sm" onClick={load} disabled={loading}>
             {loading ? "Refreshing…" : "Refresh"}
           </button>

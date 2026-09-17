@@ -5,6 +5,7 @@ import Callback from "./pages/Callback";
 import Dashboard from "./pages/Dashboard";
 import RepoChat from "./pages/RepoChat";
 import RepoArchitecture from "./pages/RepoArchitecture";
+import RepoCommunity from "./pages/RepoCommunity";
 import { isLoggedIn } from "./lib/auth";
 
 function Protected({ children }: { children: JSX.Element }) {
@@ -37,6 +38,14 @@ function App() {
         element={
           <Protected>
             <RepoArchitecture />
+          </Protected>
+        }
+      />
+      <Route
+        path="/repo/:repoId/community"
+        element={
+          <Protected>
+            <RepoCommunity />
           </Protected>
         }
       />
