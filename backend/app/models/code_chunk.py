@@ -7,9 +7,9 @@ from pgvector.sqlalchemy import Vector
 
 from app.db.session import Base
 
-# text-embedding-3-small produces 1536-dim vectors. If you swap embedding
-# models later, this dimension must match or the column needs migrating.
-EMBEDDING_DIM = 1536
+# models/text-embedding-004 (Gemini) produces 768-dim vectors. If you swap
+# embedding models later, this dimension must match or the column needs migrating.
+EMBEDDING_DIM = 768
 
 
 class CodeChunk(Base):

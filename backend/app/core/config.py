@@ -16,9 +16,13 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24  # 1 day
 
-    # LLM providers
-    anthropic_api_key: str = ""
-    openai_api_key: str = ""
+    # LLM provider (Gemini: generation + embeddings)
+    gemini_api_key: str = ""
+    # "off" | "low" | "medium" | "high" -- thinking tokens draw from the same
+    # max_output_tokens budget as the visible answer, so raising this without
+    # enough headroom can silently truncate JSON-extraction responses (see
+    # app/services/llm.py::_generation_config).
+    gemini_thinking_level: str = "off"
 
     # Stripe
     stripe_secret_key: str = ""

@@ -3,8 +3,10 @@ Thin entry point so `python worker.py` works from backend/ (as documented
 in the README) while the actual worker lives in app/worker.py alongside
 the rest of the application code.
 """
-from app.worker import queue, redis_conn  # noqa: F401
-from rq import Worker
+import logging
+
+from app.worker import run_worker
 
 if __name__ == "__main__":
-    Worker([queue], connection=redis_conn).work()
+    logging.basicConfig(level=logging.INFO)
+    run_worker()

@@ -58,9 +58,9 @@ LANGUAGE_BY_EXT = {
 # gets silently dropped (e.g. a constants-only file).
 FUNCTION_NODE_TYPES = {
     "python": {"function_definition"},
-    "javascript": {"function_declaration", "method_definition", "function"},
-    "typescript": {"function_declaration", "method_definition", "function_signature"},
-    "tsx": {"function_declaration", "method_definition", "function_signature"},
+    "javascript": {"function_declaration", "method_definition", "function_expression"},
+    "typescript": {"function_declaration", "method_definition", "function_signature", "function_expression"},
+    "tsx": {"function_declaration", "method_definition", "function_signature", "function_expression"},
 }
 CLASS_NODE_TYPES = {
     "python": {"class_definition"},
@@ -220,16 +220,45 @@ def _readme_chunk(root: Path, readme_path: Path) -> dict:
     }
 
 
-def _chunk_file(path: Path, root: Path) -> list[dict]:
+_PARSERS: dict[str, "Parser"] = {}
+
+
+def _get_parser(lang: str) -> "Parser":
     """
-    Import tree_sitter_languages lazily so a missing/broken native
+    Builds (and caches) a tree-sitter Parser per language. Imports the
+    per-language grammar package lazily so a missing/broken native
     grammar dependency only breaks ingestion, not the whole app.
     """
-    from tree_sitter_languages import get_parser
+    parser = _PARSERS.get(lang)
+    if parser is not None:
+        return parser
 
+    from tree_sitter import Language, Parser
+
+    if lang == "python":
+        import tree_sitter_python as ts_grammar
+        language = Language(ts_grammar.language())
+    elif lang == "javascript":
+        import tree_sitter_javascript as ts_grammar
+        language = Language(ts_grammar.language())
+    elif lang == "typescript":
+        import tree_sitter_typescript as ts_grammar
+        language = Language(ts_grammar.language_typescript())
+    elif lang == "tsx":
+        import tree_sitter_typescript as ts_grammar
+        language = Language(ts_grammar.language_tsx())
+    else:
+        raise ValueError(f"Unsupported language: {lang}")
+
+    parser = Parser(language)
+    _PARSERS[lang] = parser
+    return parser
+
+
+def _chunk_file(path: Path, root: Path) -> list[dict]:
     lang = LANGUAGE_BY_EXT[path.suffix]
     source = path.read_bytes()
-    parser = get_parser(lang)
+    parser = _get_parser(lang)
     tree = parser.parse(source)
 
     rel_path = str(path.relative_to(root))

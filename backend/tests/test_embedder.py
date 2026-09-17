@@ -15,7 +15,9 @@ def test_embed_repo_chunks_batches_embeds_and_builds_index(fake_db, monkeypatch)
     fake_db.query.return_value.filter.return_value.all.return_value = chunks
 
     fake_client = MagicMock()
-    fake_client.embeddings.create.return_value = MagicMock(data=[MagicMock(embedding=[float(i)]) for i in range(3)])
+    fake_client.models.embed_content.return_value = MagicMock(
+        embeddings=[MagicMock(values=[float(i)]) for i in range(3)]
+    )
     monkeypatch.setattr(embedder, "_get_client", lambda: fake_client)
 
     embedder.embed_repo_chunks(fake_db, "repo-1")
@@ -40,7 +42,7 @@ def test_embed_repo_chunks_skips_failed_batch_without_raising(fake_db, monkeypat
     fake_db.query.return_value.filter.return_value.all.return_value = chunks
 
     def boom(texts):
-        raise RuntimeError("openai is down")
+        raise RuntimeError("gemini is down")
 
     monkeypatch.setattr(embedder, "_embed_batch", boom)
 
@@ -52,10 +54,10 @@ def test_embed_repo_chunks_skips_failed_batch_without_raising(fake_db, monkeypat
 
 def test_embed_batch_substitutes_blank_chunks(monkeypatch):
     fake_client = MagicMock()
-    fake_client.embeddings.create.return_value = MagicMock(data=[MagicMock(embedding=[1.0])])
+    fake_client.models.embed_content.return_value = MagicMock(embeddings=[MagicMock(values=[1.0])])
     monkeypatch.setattr(embedder, "_get_client", lambda: fake_client)
 
     embedder._embed_batch([""])
 
-    _, kwargs = fake_client.embeddings.create.call_args
-    assert kwargs["input"] == [" "]
+    _, kwargs = fake_client.models.embed_content.call_args
+    assert kwargs["contents"] == [" "]

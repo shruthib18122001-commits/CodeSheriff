@@ -1,10 +1,11 @@
+import base64
 import uuid
 from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
 
-from app.api.query import AskRequest, ask_question
+from app.api.query import Attachment, AskRequest, ask_question
 from app.models.repo import IndexStatus
 
 
@@ -18,7 +19,7 @@ def test_ask_question_happy_path(make_user, make_repo, fake_db, monkeypatch):
     monkeypatch.setattr("app.api.query.search_chunks", lambda db, repo_id, emb, top_k=8: [fake_chunk])
     monkeypatch.setattr(
         "app.api.query.ask_codebase",
-        lambda question, chunks: {
+        lambda question, chunks, thinking_level=None, attachments=None: {
             "answer": "It's in app.py",
             "sources": [{"file_path": "app.py", "start_line": 1, "end_line": 5, "symbol_name": "foo"}],
         },
@@ -67,6 +68,39 @@ def test_ask_question_409_when_repo_still_indexing(make_user, make_repo, fake_db
     assert exc_info.value.status_code == 409
 
 
+def test_ask_question_422_on_invalid_attachment_base64(make_user, make_repo, fake_db):
+    user = make_user(plan="pro")
+    repo = make_repo(owner_id=user.id, index_status=IndexStatus.ready)
+    fake_db.query.return_value.filter.return_value.first.return_value = repo
+
+    payload = AskRequest(
+        repo_id=repo.id,
+        question="what is this?",
+        attachments=[Attachment(filename="bad.png", mime_type="image/png", data="not-valid-base64!!")],
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        ask_question(payload, current_user=user, db=fake_db)
+
+    assert exc_info.value.status_code == 422
+
+
+def test_ask_question_422_on_oversized_attachments(make_user, make_repo, fake_db):
+    user = make_user(plan="pro")
+    repo = make_repo(owner_id=user.id, index_status=IndexStatus.ready)
+    fake_db.query.return_value.filter.return_value.first.return_value = repo
+
+    huge = base64.b64encode(b"x" * (16 * 1024 * 1024)).decode()
+    payload = AskRequest(
+        repo_id=repo.id,
+        question="what is this?",
+        attachments=[Attachment(filename="huge.png", mime_type="image/png", data=huge)],
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        ask_question(payload, current_user=user, db=fake_db)
+
+    assert exc_info.value.status_code == 422
+
+
 def test_ask_question_422_on_blank_question(make_user, make_repo, fake_db):
     user = make_user(plan="pro")
     repo = make_repo(owner_id=user.id, index_status=IndexStatus.ready)
@@ -88,7 +122,7 @@ def test_ask_question_persists_query_history(make_user, make_repo, fake_db, monk
     monkeypatch.setattr("app.api.query.search_chunks", lambda db, repo_id, emb, top_k=8: [])
     monkeypatch.setattr(
         "app.api.query.ask_codebase",
-        lambda question, chunks: {"answer": "no relevant code found", "sources": []},
+        lambda question, chunks, thinking_level=None, attachments=None: {"answer": "no relevant code found", "sources": []},
     )
 
     payload = AskRequest(repo_id=repo.id, question="Anything?")

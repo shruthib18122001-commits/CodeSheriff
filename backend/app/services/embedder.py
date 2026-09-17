@@ -8,10 +8,13 @@ rows fill in, per the project's ingestion-order constraint.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Optional
 
 import sqlalchemy
-from openai import OpenAI
+from google import genai
+from google.genai import errors as genai_errors
+from google.genai import types
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -19,16 +22,22 @@ from app.models.code_chunk import CodeChunk
 
 logger = logging.getLogger(__name__)
 
-EMBEDDING_MODEL = "text-embedding-3-small"
+EMBEDDING_MODEL = "models/gemini-embedding-001"
+EMBEDDING_DIM = 768  # must match CodeChunk.embedding's pgvector column
 BATCH_SIZE = 100
 
-_client: Optional[OpenAI] = None
+# The free tier allows very few embed_content requests per minute; a repo
+# with more than one batch's worth of chunks reliably hits 429s otherwise.
+MAX_RATE_LIMIT_RETRIES = 5
+DEFAULT_RETRY_DELAY_SECONDS = 30
+
+_client: Optional[genai.Client] = None
 
 
-def _get_client() -> OpenAI:
+def _get_client() -> genai.Client:
     global _client
     if _client is None:
-        _client = OpenAI(api_key=settings.openai_api_key)
+        _client = genai.Client(api_key=settings.gemini_api_key)
     return _client
 
 
@@ -64,12 +73,36 @@ def embed_repo_chunks(db: Session, repo_id) -> None:
 
 
 def _embed_batch(texts: list[str]) -> list[list[float]]:
-    # The OpenAI embeddings API rejects empty strings; blank chunks
-    # (rare, but possible for near-empty files) get a single space.
+    # The embeddings API rejects empty strings; blank chunks (rare, but
+    # possible for near-empty files) get a single space.
     safe_texts = [t if t and t.strip() else " " for t in texts]
     client = _get_client()
-    response = client.embeddings.create(model=EMBEDDING_MODEL, input=safe_texts)
-    return [item.embedding for item in response.data]
+    config = types.EmbedContentConfig(output_dimensionality=EMBEDDING_DIM)
+
+    for attempt in range(1, MAX_RATE_LIMIT_RETRIES + 1):
+        try:
+            response = client.models.embed_content(model=EMBEDDING_MODEL, contents=safe_texts, config=config)
+            return [item.values for item in response.embeddings]
+        except genai_errors.ClientError as e:
+            if e.code != 429 or attempt == MAX_RATE_LIMIT_RETRIES:
+                raise
+            delay = _retry_delay_seconds(e) or DEFAULT_RETRY_DELAY_SECONDS
+            logger.warning(
+                "Gemini embedding rate-limited, retrying in %ss (attempt %d/%d)",
+                delay, attempt, MAX_RATE_LIMIT_RETRIES,
+            )
+            time.sleep(delay)
+
+
+def _retry_delay_seconds(error: genai_errors.ClientError) -> Optional[float]:
+    """Pulls the server-suggested retry delay (e.g. "38s") out of a 429's details, if present."""
+    try:
+        for detail in error.details.get("error", {}).get("details", []):
+            if detail.get("@type", "").endswith("RetryInfo"):
+                return float(detail["retryDelay"].rstrip("s"))
+    except (AttributeError, KeyError, ValueError, TypeError):
+        pass
+    return None
 
 
 def _create_hnsw_index(db: Session) -> None:

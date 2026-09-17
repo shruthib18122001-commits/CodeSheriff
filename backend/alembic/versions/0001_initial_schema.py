@@ -25,7 +25,7 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
-EMBEDDING_DIM = 1536
+EMBEDDING_DIM = 768  # models/text-embedding-004 (Gemini)
 
 index_status_enum = postgresql.ENUM(
     "pending", "cloning", "parsing", "embedding", "ready", "failed",
@@ -35,7 +35,6 @@ index_status_enum = postgresql.ENUM(
 
 def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
-    index_status_enum.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
         "users",

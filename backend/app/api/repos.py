@@ -82,7 +82,7 @@ def _get_owned_repo(repo_id: uuid.UUID, current_user: User, db: Session) -> Repo
 
 
 def _parse_json_response(text: str) -> dict:
-    """Claude sometimes wraps JSON in ```json fences despite instructions -- strip them."""
+    """Gemini sometimes wraps JSON in ```json fences despite instructions -- strip them."""
     cleaned = text.strip()
     if cleaned.startswith("```"):
         cleaned = cleaned.strip("`")
@@ -93,6 +93,14 @@ def _parse_json_response(text: str) -> dict:
         return json.loads(cleaned)
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=502, detail="AI service returned an unparseable response") from e
+
+
+def _raw_completion_or_502(prompt: str, max_tokens: int) -> str:
+    try:
+        return raw_completion(prompt, max_tokens=max_tokens)
+    except Exception as e:
+        logger.exception("Gemini call failed")
+        raise HTTPException(status_code=502, detail="AI service is temporarily unavailable") from e
 
 
 @router.get("", response_model=list[RepoResponse])
@@ -210,7 +218,7 @@ def get_repo_architecture(
         "their dependencies.\n\n" + "\n".join(summary_parts)
     )
 
-    raw = raw_completion(prompt, max_tokens=3000)
+    raw = _raw_completion_or_502(prompt, max_tokens=3000)
     parsed = _parse_json_response(raw)
     result = ArchitectureResponse(
         nodes=[ArchitectureNode(**n) for n in parsed.get("nodes", [])],
@@ -258,7 +266,7 @@ def get_repo_drift(
         f"## Actual code structure\n{structure_summary}"
     )
 
-    raw = raw_completion(prompt, max_tokens=2000)
+    raw = _raw_completion_or_502(prompt, max_tokens=2000)
     parsed = _parse_json_response(raw)
     return DriftResponse(drifts=[DriftItem(**d) for d in parsed.get("drifts", [])])
 

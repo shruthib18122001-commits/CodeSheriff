@@ -10,7 +10,7 @@ break if you change a schema, how a service handles errors.
 - **Backend**: FastAPI
 - **Database**: PostgreSQL + pgvector (semantic code search)
 - **Cache / queue**: Redis
-- **AI**: tree-sitter for parsing, OpenAI/Anthropic for embeddings + reasoning
+- **AI**: tree-sitter for parsing, Gemini for embeddings + reasoning
 - **Billing**: Stripe (free / pro / team plans)
 
 See `docs/DECISIONS.md` for architecture decision log (start this today —

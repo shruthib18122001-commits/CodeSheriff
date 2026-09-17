@@ -2,15 +2,16 @@
 Query-time LLM helpers used by app/api/query.py:
   - embed_text:    turn the user's question into a vector
   - search_chunks: pgvector cosine-similarity search scoped to one repo
-  - ask_codebase:  build a grounded prompt from retrieved chunks, ask Claude
+  - ask_codebase:  build a grounded prompt from retrieved chunks, ask Gemini
 """
 from __future__ import annotations
 
+import base64
 import logging
 from typing import Optional
 
-from anthropic import Anthropic
-from openai import OpenAI
+from google import genai
+from google.genai import types
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -18,30 +19,27 @@ from app.models.code_chunk import CodeChunk
 
 logger = logging.getLogger(__name__)
 
-EMBEDDING_MODEL = "text-embedding-3-small"
-CHAT_MODEL = "claude-sonnet-4-6"
+EMBEDDING_MODEL = "models/gemini-embedding-001"
+EMBEDDING_DIM = 768  # must match CodeChunk.embedding's pgvector column
+CHAT_MODEL = "gemini-flash-latest"
 
-_openai_client: Optional[OpenAI] = None
-_anthropic_client: Optional[Anthropic] = None
-
-
-def _openai() -> OpenAI:
-    global _openai_client
-    if _openai_client is None:
-        _openai_client = OpenAI(api_key=settings.openai_api_key)
-    return _openai_client
+_client: Optional[genai.Client] = None
 
 
-def _anthropic() -> Anthropic:
-    global _anthropic_client
-    if _anthropic_client is None:
-        _anthropic_client = Anthropic(api_key=settings.anthropic_api_key)
-    return _anthropic_client
+def _gemini() -> genai.Client:
+    global _client
+    if _client is None:
+        _client = genai.Client(api_key=settings.gemini_api_key)
+    return _client
 
 
 def embed_text(text: str) -> list[float]:
-    response = _openai().embeddings.create(model=EMBEDDING_MODEL, input=text or " ")
-    return response.data[0].embedding
+    response = _gemini().models.embed_content(
+        model=EMBEDDING_MODEL,
+        contents=text or " ",
+        config=types.EmbedContentConfig(output_dimensionality=EMBEDDING_DIM),
+    )
+    return response.embeddings[0].values
 
 
 def search_chunks(db: Session, repo_id, query_embedding: list[float], top_k: int = 8) -> list[CodeChunk]:
@@ -55,29 +53,65 @@ def search_chunks(db: Session, repo_id, query_embedding: list[float], top_k: int
     )
 
 
+THINKING_LEVELS = ("off", "low", "medium", "high")
+
+
+def _resolve_thinking_level(override: Optional[str]) -> str:
+    level = (override or settings.gemini_thinking_level).lower()
+    if level not in THINKING_LEVELS:
+        raise ValueError(f"Invalid thinking level: {level!r}")
+    return level
+
+
+def _thinking_config(level: str) -> types.ThinkingConfig:
+    # gemini-flash-latest thinks by default, and thinking tokens are drawn
+    # from the same max_output_tokens budget as the visible answer -- with
+    # thinking on and too little headroom, the budget gets silently eaten
+    # by reasoning and the response truncates before any real output (e.g.
+    # mid-JSON for the architecture-map prompt). "off" is the safe default
+    # for that reason; callers requesting a real level must also budget
+    # extra max_tokens headroom (see ask_codebase).
+    if level == "off":
+        return types.ThinkingConfig(thinking_budget=0)
+    return types.ThinkingConfig(thinking_level=level)
+
+
+def _generation_config(max_tokens: int, thinking_level: Optional[str] = None) -> types.GenerateContentConfig:
+    return types.GenerateContentConfig(
+        max_output_tokens=max_tokens,
+        thinking_config=_thinking_config(_resolve_thinking_level(thinking_level)),
+    )
+
+
 def raw_completion(prompt: str, max_tokens: int = 2000) -> str:
     """
     Generic single-turn completion used by non-Q&A features (architecture
     map, drift detection) that need a free-form or JSON response from
-    Claude rather than the grounded Q&A flow in ask_codebase.
+    Gemini rather than the grounded Q&A flow in ask_codebase.
     """
-    response = _anthropic().messages.create(
+    response = _gemini().models.generate_content(
         model=CHAT_MODEL,
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}],
+        contents=prompt,
+        config=_generation_config(max_tokens),
     )
-    return "".join(
-        block.text for block in response.content if getattr(block, "type", None) == "text"
-    ).strip()
+    return (response.text or "").strip()
 
 
-def ask_codebase(question: str, chunks: list[CodeChunk]) -> dict:
+def ask_codebase(
+    question: str,
+    chunks: list[CodeChunk],
+    thinking_level: Optional[str] = None,
+    attachments: Optional[list[dict]] = None,
+) -> dict:
     """
     Builds a prompt grounded in the retrieved chunks (each labeled with
-    file path + line range) and asks Claude to answer using only that
-    context. Returns {"answer": str, "sources": [...]}.
+    file path + line range) plus any user-supplied attachments (screenshots,
+    log files, etc.) and asks Gemini to answer using that context. Returns
+    {"answer": str, "sources": [...]}.
     """
-    if not chunks:
+    attachments = attachments or []
+
+    if not chunks and not attachments:
         return {
             "answer": (
                 "I couldn't find any indexed code relevant to this question. "
@@ -95,27 +129,36 @@ def ask_codebase(question: str, chunks: list[CodeChunk]) -> dict:
 
     prompt = (
         "You are a senior engineer answering questions about a codebase. "
-        "Use ONLY the code excerpts below to answer. Cite specific files "
-        "and line numbers in your answer where relevant. If the excerpts "
-        "don't contain enough information to answer confidently, say so "
+        "Use the code excerpts below, plus any attached files or images, "
+        "to answer. Cite specific files and line numbers where relevant. "
+        "If there isn't enough information to answer confidently, say so "
         "instead of guessing.\n\n"
         f"Question: {question}\n\n"
         "Code excerpts:\n\n" + "\n\n".join(context_blocks)
     )
 
     try:
-        response = _anthropic().messages.create(
+        resolved_level = _resolve_thinking_level(thinking_level)
+        # Thinking tokens eat into max_output_tokens too, so give extra
+        # headroom whenever thinking is actually on -- otherwise a "high"
+        # answer to a meaty question can burn the whole budget on reasoning
+        # and come back empty (see _thinking_config).
+        max_tokens = 1500 if resolved_level == "off" else 3000
+
+        contents: list = [prompt]
+        for a in attachments:
+            contents.append(types.Part.from_bytes(data=base64.b64decode(a["data"]), mime_type=a["mime_type"]))
+
+        response = _gemini().models.generate_content(
             model=CHAT_MODEL,
-            max_tokens=1500,
-            messages=[{"role": "user", "content": prompt}],
+            contents=contents,
+            config=_generation_config(max_tokens, resolved_level),
         )
-        answer = "".join(
-            block.text for block in response.content if getattr(block, "type", None) == "text"
-        ).strip()
+        answer = (response.text or "").strip()
         if not answer:
             answer = "The model returned an empty response. Please try again."
     except Exception:
-        logger.exception("Anthropic call failed for question=%r", question)
+        logger.exception("Gemini call failed for question=%r", question)
         answer = "The AI service is temporarily unavailable. Please try again shortly."
 
     sources = [

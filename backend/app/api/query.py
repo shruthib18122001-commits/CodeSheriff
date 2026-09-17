@@ -1,4 +1,6 @@
+import base64
 import uuid
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -14,10 +16,23 @@ from app.services.llm import ask_codebase, embed_text, search_chunks
 
 router = APIRouter()
 
+# Comfortably under Gemini's ~20MB inline-request ceiling once base64 overhead
+# (~4/3x) and the rest of the prompt are accounted for.
+MAX_ATTACHMENTS_BYTES = 15 * 1024 * 1024
+
+
+class Attachment(BaseModel):
+    filename: str
+    mime_type: str
+    data: str  # base64-encoded file contents
+
 
 class AskRequest(BaseModel):
     repo_id: uuid.UUID
     question: str
+    # None = use the server-configured default (GEMINI_THINKING_LEVEL).
+    thinking_level: Optional[Literal["low", "medium", "high"]] = None
+    attachments: list[Attachment] = []
 
 
 class SourceResponse(BaseModel):
@@ -62,9 +77,26 @@ def ask_question(
     if not payload.question or not payload.question.strip():
         raise HTTPException(status_code=422, detail="Question cannot be empty")
 
+    total_bytes = 0
+    for a in payload.attachments:
+        try:
+            total_bytes += len(base64.b64decode(a.data, validate=True))
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=422, detail=f"Attachment '{a.filename}' is not valid base64 data")
+    if total_bytes > MAX_ATTACHMENTS_BYTES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Attachments too large ({total_bytes // 1024}KB); limit is {MAX_ATTACHMENTS_BYTES // 1024}KB.",
+        )
+
     query_embedding = embed_text(payload.question)
     chunks = search_chunks(db, repo.id, query_embedding, top_k=8)
-    result = ask_codebase(payload.question, chunks)
+    result = ask_codebase(
+        payload.question,
+        chunks,
+        thinking_level=payload.thinking_level,
+        attachments=[a.model_dump() for a in payload.attachments],
+    )
 
     current_user.queries_this_month += 1
 
